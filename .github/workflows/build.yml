@@ -4,38 +4,36 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build:
-    name: Build, Test, and Analyze with SonarQube
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:latest
+        ports:
+          - "5432:5432" # Puerto de PostgreSQL
+        env:
+          POSTGRES_USER: postgres       # Usuario de la base de datos
+          POSTGRES_PASSWORD: admin      # Contraseña de la base de datos
+          POSTGRES_DB: sisdb2025        # Nombre de la base de datos
+
     steps:
-      # Checkout the code from the repository
+      # Checkout del repositorio
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for better relevancy of analysis
+          fetch-depth: 0 # Clonar todo el historial para relevancia en el análisis de SonarQube
 
-      # Set up Java 17 for Maven
+      # Configuración de Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: 'zulu'
 
-      # Cache SonarQube dependencies
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
-      # Cache Maven dependencies
+      # Cache de dependencias de Maven
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
@@ -43,7 +41,31 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # Run Maven build, test, and SonarQube analysis
+      # Cache de dependencias de SonarQube
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      # Esperar a que PostgreSQL esté disponible
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+
+      # Configurar la base de datos si es necesario
+      - name: Configure database
+        run: |
+          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE sisdb2025;"
+        env:
+          PGPASSWORD: admin
+
+      # Construcción, pruebas y análisis con SonarQube
       - name: Build, Test, and Analyze with SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -54,7 +76,7 @@ jobs:
             -Dsonar.projectName='estudiantes' \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
-      # Verify Jacoco coverage report exists
+      # Verificar que el informe de cobertura de JaCoCo existe
       - name: Verify Jacoco Coverage Report
         run: |
           if [ ! -f target/site/jacoco/jacoco.xml ]; then
