@@ -34,7 +34,6 @@ jobs:
           distribution: 'zulu'
 
       # Cache de dependencias de Maven
-      # s
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
