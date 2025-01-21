@@ -13,18 +13,29 @@ jobs:
       postgres:
         image: postgres:latest
         ports:
-          - "5432:5432" # Puerto de PostgreSQL
+          - "5432:5432"
         env:
-          POSTGRES_USER: postgres       # Usuario de la base de datos
-          POSTGRES_PASSWORD: admin      # Contraseña de la base de datos
-          POSTGRES_DB: sisdb2025        # Nombre de la base de datos
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: sisdb2025
+
+      sonarqube:
+        image: sonarqube:community
+        ports:
+          - "9000:9000"
+        options: --name sonarqube
+        env:
+          SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+          SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sisdb2025
+          SONAR_JDBC_USERNAME: postgres
+          SONAR_JDBC_PASSWORD: admin
 
     steps:
       # Checkout del repositorio
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Clonar todo el historial para relevancia en el análisis de SonarQube
+          fetch-depth: 0
 
       # Configuración de Java 17
       - name: Set up JDK 17
@@ -41,14 +52,6 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # Cache de dependencias de SonarQube
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
       # Esperar a que PostgreSQL esté disponible
       - name: Wait for PostgreSQL
         run: |
@@ -57,6 +60,15 @@ jobs:
             sleep 2
           done
           echo "PostgreSQL is ready!"
+
+      # Esperar a que SonarQube esté disponible
+      - name: Wait for SonarQube
+        run: |
+          until curl -s http://localhost:9000/api/system/status | grep -q '"status":"UP"'; do
+            echo "Waiting for SonarQube to be ready..."
+            sleep 10
+          done
+          echo "SonarQube is ready!"
 
       # Configurar la base de datos si es necesario
       - name: Configure database
@@ -69,7 +81,7 @@ jobs:
       - name: Build, Test, and Analyze with SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: http://localhost:9000
         run: |
           mvn clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
             -Dsonar.projectKey=estudiantes \
