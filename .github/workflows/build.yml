@@ -1,4 +1,4 @@
-name: Build
+name: Build and Analyze with SonarQube and ngrok
 
 on:
   push:
@@ -7,50 +7,45 @@ on:
 
 jobs:
   build:
-    name: Build and analyze
+    name: Build, Test, and Analyze
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Shallow clones should be disabled for better analysis
 
+      # Set up JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'zulu'
+          distribution: 'zulu'  # Other distributions are available if needed
 
-      - name: Cache SonarQube packages
+      # Cache ngrok, Maven, and SonarQube dependencies
+      - name: Cache ngrok and Maven dependencies
         uses: actions/cache@v4
         with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+          path: |
+            ~/.m2
+            ~/.sonar/cache
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven
 
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
-      - name: Download and Install ngrok
-        run: |
-          curl -O https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-          tar -xvf ngrok-v3-stable-linux-amd64.tgz -C /usr/local/bin
-
+      # Authenticate ngrok
       - name: Authenticate ngrok
         run: ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
 
-      - name: Start ngrok
-        run: nohup ngrok http 9000 &
-
-      - name: Wait for ngrok setup
-        run: sleep 10
-
-      - name: Build and analyze
+      # Build, Test, and Run SonarQube Analysis
+      - name: Build and Analyze with SonarQube
         env:
-          SONAR_TOKEN: sqp_716dab187b07844caf2e90ba5f378d81a5c397f8
-          SONAR_HOST_URL: http://127.0.0.1:4040
-        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=EstudiantesTest -Dsonar.projectName='EstudiantesTest'
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+          -Dsonar.projectKey=EstudiantesTest \
+          -Dsonar.projectName="Estudiantes Test Project" \
+          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
