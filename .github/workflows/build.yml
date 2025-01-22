@@ -24,8 +24,20 @@ jobs:
           java-version: 17
           distribution: 'zulu'  # Other distributions are available if needed
 
-      # Cache ngrok, Maven, and SonarQube dependencies
-      - name: Cache ngrok and Maven dependencies
+      # Install ngrok
+      - name: Install ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com stable main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update
+          sudo apt-get install ngrok
+
+      # Authenticate ngrok
+      - name: Authenticate ngrok
+        run: ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
+
+      # Cache Maven and SonarQube dependencies
+      - name: Cache Maven and SonarQube dependencies
         uses: actions/cache@v4
         with:
           path: |
@@ -34,10 +46,6 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven
-
-      # Authenticate ngrok
-      - name: Authenticate ngrok
-        run: ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
 
       # Build, Test, and Run SonarQube Analysis
       - name: Build and Analyze with SonarQube
